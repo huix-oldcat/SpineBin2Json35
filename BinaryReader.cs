@@ -42,6 +42,7 @@ namespace SpineBin2Json35
         Stream input;
         AtlasReader atlasReader;
         TextWriter warning;
+        List<(string, string)> warnings = new List<(string, string)>();
 
         bool nonessential;
         List<string> bones = new List<string>();
@@ -100,13 +101,13 @@ namespace SpineBin2Json35
             root["path"] = path_map;
 
             var skins_map = new Dictionary<string, object>();
-            skins_map["default"] = ReadSkin();
+            skins_map["default"] = ReadSkin("default");
             skins.Add("default");
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
                 string skin_name = ReadString(input);
                 skins.Add(skin_name);
-                skins_map[skin_name] = ReadSkin();
+                skins_map[skin_name] = ReadSkin(skin_name);
             }
             root["skins"] = skins_map;
 
@@ -115,11 +116,12 @@ namespace SpineBin2Json35
             {
                 string name = ReadString(input);
                 events.Add(name);
-                var e1 = new Dictionary<string, object>();
-                e1["int"] = ReadVarint(input, false);
-                e1["float"] = ReadFloat(input);
-                e1["string"] = ReadString(input);
-                events_map[name] = e1;
+                events_map[name] = new Dictionary<string, object>
+                {
+                    ["int"] = ReadVarint(input, false),
+                    ["float"] = ReadFloat(input),
+                    ["string"] = ReadString(input)
+                };
             }
             root["events"] = events_map;
 
@@ -127,25 +129,33 @@ namespace SpineBin2Json35
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
                 string name = ReadString(input);
-                an_map[name] = ReadAnimation();
+                an_map[name] = ReadAnimation(name);
             }
             root["animations"] = an_map;
+
+            var w = new Dictionary<string, List<string>>();
+            foreach(var i in warnings)
+            {
+                if (w.ContainsKey(i.Item1) == false)
+                {
+                    w[i.Item1] = new List<string>();
+                    warning.WriteLine($"DragonBones may not support {i.Item1}");
+                }
+                w[i.Item1].Add(i.Item2);
+            }
+            if (w.Count > 0)
+            {
+                warning.WriteLine("---------------Details---------------");
+                foreach (var i in w)
+                {
+                    warning.WriteLine(i.Key + ':');
+                    foreach (var j in i.Value) warning.WriteLine('\t' + j);
+                }
+            }
 
             return root;
         }
 
-        /*static void ReadCurve (Dictionary<string, Object> valueMap, CurveTimeline timeline, int frameIndex) {
-            if (!valueMap.ContainsKey("curve"))
-                return;
-            Object curveObject = valueMap["curve"];
-            if (curveObject.Equals("stepped"))
-                timeline.SetStepped(frameIndex);
-            else {
-                var curve = curveObject as List<Object>;
-                if (curve != null)
-                    timeline.SetCurve(frameIndex, (float)curve[0], (float)curve[1], (float)curve[2], (float)curve[3]);
-            }
-        } */
         void ReadCurve(Dictionary<string, object> root)
         {
             switch (input.ReadByte())
@@ -158,19 +168,8 @@ namespace SpineBin2Json35
                     break;
             }
         }
-        /*private void ReadCurve (Stream input, int frameIndex, CurveTimeline timeline) {
-            switch (input.ReadByte()) {
-            case CURVE_STEPPED:
-                timeline.SetStepped(frameIndex);
-                break;
-            case CURVE_BEZIER:
-                timeline.SetCurve(frameIndex, ReadFloat(input), ReadFloat(input), ReadFloat(input), ReadFloat(input));
-                break;
-            }
-        } */
 
-
-        object ReadAnimation()
+        object ReadAnimation(string animationName)
         {
             var root = new Dictionary<string, object>();
 
@@ -188,55 +187,34 @@ namespace SpineBin2Json35
                     {
                         case SLOT_ATTACHMENT:
                             {
-                                if (timelineMap.ContainsKey("attachment") == false)
-                                {
-                                    timelineMap["attachment"] = new List<object>();
-                                }
+                                if (timelineMap.ContainsKey("attachment") == false) timelineMap["attachment"] = new List<object>();
                                 var timelines = timelineMap["attachment"] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    var details = new Dictionary<string, object>();
-                                    details["time"] = ReadFloat(input);
-                                    details["name"] = ReadString(input);
-                                    timelines.Add(details);
+                                    timelines.Add(new Dictionary<string, object>
+                                    {
+                                        ["time"] = ReadFloat(input),
+                                        ["name"] = ReadString(input)
+                                    });
                                 }
                                 break;
                             }
                         case SLOT_COLOR:
                             {
-                                if (timelineMap.ContainsKey("color") == false)
-                                {
-                                    timelineMap["color"] = new List<object>();
-                                }
+                                if (timelineMap.ContainsKey("color") == false) timelineMap["color"] = new List<object>(); 
                                 var timelines = timelineMap["color"] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    var details = new Dictionary<string, object>();
-                                    details["time"] = ReadFloat(input);
-                                    details["color"] = ColorTranslator.ColorToString(ReadInt(input), 8);
+                                    var details = new Dictionary<string, object>
+                                    {
+                                        ["time"] = ReadFloat(input),
+                                        ["color"] = ColorTranslator.ColorToString(ReadInt(input), 8)
+                                    };
                                     if (frameIndex < frameCount - 1) ReadCurve(details);
                                     timelines.Add(details);
                                 }
                                 break;
                             }
-                            // case SLOT_TWO_COLOR:
-                            //     {
-                            //         if (timelineMap.ContainsKey("twoColor") == false)
-                            //         {
-                            //             timelineMap["twoColor"] = new List<object>();
-                            //         }
-                            //         var timelines = timelineMap["twoColor"] as List<object>;
-                            //         for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
-                            //         {
-                            //             var details = new Dictionary<string, object>();
-                            //             details["time"] = ReadFloat(input);
-                            //             details["light"] = ColorTranslator.RgbaToString(ReadInt(input));
-                            //             details["dark"] = ColorTranslator.RgbToString(ReadInt(input));
-                            //             if (frameIndex < frameCount - 1) ReadCurve(details);
-                            //             timelines.Add(details);
-                            //         }
-                            //         break;
-                            //     }
                     }
                 }
             }
@@ -256,16 +234,15 @@ namespace SpineBin2Json35
                     {
                         case BONE_ROTATE:
                             {
-                                if (timelineMap.ContainsKey("rotate") == false)
-                                {
-                                    timelineMap["rotate"] = new List<object>();
-                                }
+                                if (timelineMap.ContainsKey("rotate") == false) timelineMap["rotate"] = new List<object>();
                                 var timelines = timelineMap["rotate"] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    var details = new Dictionary<string, object>();
-                                    details["time"] = ReadFloat(input);
-                                    details["angle"] = ReadFloat(input);
+                                    var details = new Dictionary<string, object>
+                                    {
+                                        ["time"] = ReadFloat(input),
+                                        ["angle"] = ReadFloat(input)
+                                    };
                                     if (frameIndex < frameCount - 1) ReadCurve(details);
                                     timelines.Add(details);
                                 }
@@ -275,25 +252,24 @@ namespace SpineBin2Json35
                         case BONE_SCALE:
                         case BONE_SHEAR:
                             {
-                                string type = "";
+                                string type;
                                 if (timelineType == BONE_SCALE)
                                     type = "scale";
                                 else if (timelineType == BONE_SHEAR)
                                     type = "shear";
                                 else
                                     type = "translate";
-                                if (type == "shear") warning.WriteLine($"Dragonbones cannot support BONE_SHEAR");
-                                if (timelineMap.ContainsKey(type) == false)
-                                {
-                                    timelineMap[type] = new List<object>();
-                                }
+                                if (type == "shear") warnings.Add(("bone timeline shear keyframe", $"animation {animationName} bone {boneName}"));
+                                if (timelineMap.ContainsKey(type) == false) timelineMap[type] = new List<object>(); 
                                 var timelines = timelineMap[type] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    var details = new Dictionary<string, object>();
-                                    details["time"] = ReadFloat(input);
-                                    details["x"] = ReadFloat(input);
-                                    details["y"] = ReadFloat(input);
+                                    var details = new Dictionary<string, object>
+                                    {
+                                        ["time"] = ReadFloat(input),
+                                        ["x"] = ReadFloat(input),
+                                        ["y"] = ReadFloat(input)
+                                    };
                                     if (frameIndex < frameCount - 1) ReadCurve(details);
                                     timelines.Add(details);
                                 }
@@ -313,13 +289,13 @@ namespace SpineBin2Json35
                 ikMap[iks[index]] = e1;
                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                 {
-                    var details = new Dictionary<string, object>();
+                    var details = new Dictionary<string, object>
+                    {
+                        ["time"] = ReadFloat(input),
+                        ["mix"] = ReadFloat(input),
+                        ["bendPositive"] = ReadSByte(input) == 1
+                    };
                     e1.Add(details);
-                    details["time"] = ReadFloat(input);
-                    details["mix"] = ReadFloat(input);
-                    details["bendPositive"] = ReadSByte(input) == 1;
-                    // details["compress"] = ReadBoolean(input);
-                    // details["stretch"] = ReadBoolean(input);
                     if (frameIndex < frameCount - 1) ReadCurve(details);
                 }
             }
@@ -328,19 +304,22 @@ namespace SpineBin2Json35
             var trMap = new Dictionary<string, object>();
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
+                warnings.Add(("transform constraint timeline", $"animation {animationName}"));
                 int index = ReadVarint(input, true);
                 int frameCount = ReadVarint(input, true);
                 var e1 = new List<object>();
                 trMap[transforms[index]] = e1;
                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                 {
-                    var details = new Dictionary<string, object>();
+                    var details = new Dictionary<string, object>
+                    {
+                        ["time"] = ReadFloat(input),
+                        ["rotateMix"] = ReadFloat(input),
+                        ["translateMix"] = ReadFloat(input),
+                        ["scaleMix"] = ReadFloat(input),
+                        ["shearMix"] = ReadFloat(input)
+                    };
                     e1.Add(details);
-                    details["time"] = ReadFloat(input);
-                    details["rotateMix"] = ReadFloat(input);
-                    details["translateMix"] = ReadFloat(input);
-                    details["scaleMix"] = ReadFloat(input);
-                    details["shearMix"] = ReadFloat(input);
                     if (frameIndex < frameCount - 1) ReadCurve(details);
                 }
             }
@@ -350,6 +329,7 @@ namespace SpineBin2Json35
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
                 string pathName = paths[ReadVarint(input, true)];
+                warnings.Add(("transform path constraint timeline", $"animation {animationName}, {pathName}"));
                 var timelineMap = new Dictionary<string, object>();
                 paMap[pathName] = timelineMap;
                 for (int ii = 0, nn = ReadVarint(input, true); ii < nn; ii++)
@@ -358,15 +338,15 @@ namespace SpineBin2Json35
                     int frameCount = ReadVarint(input, true);
                     switch (timelineType)
                     {
-
                         case PATH_POSITION:
                         case PATH_SPACING:
                             {
-                                string type = "";
+                                string type;
                                 if (timelineType == PATH_SPACING)
                                     type = "spacing";
                                 else
                                     type = "position";
+                                if (timelineMap.ContainsKey(type) == false) timelineMap[type] = new List<object>();
                                 var timelines = timelineMap[type] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
@@ -380,13 +360,16 @@ namespace SpineBin2Json35
                             }
                         case PATH_MIX:
                             {
+                                if (timelineMap.ContainsKey("mix") == false) timelineMap["mix"] = new List<object>();
                                 var timelines = timelineMap["mix"] as List<object>;
                                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                                 {
-                                    var details = new Dictionary<string, object>();
-                                    details["time"] = ReadFloat(input);
-                                    details["rotateMix"] = ReadFloat(input);
-                                    details["translateMix"] = ReadFloat(input);
+                                    var details = new Dictionary<string, object>
+                                    {
+                                        ["time"] = ReadFloat(input),
+                                        ["rotateMix"] = ReadFloat(input),
+                                        ["translateMix"] = ReadFloat(input)
+                                    };
                                     if (frameIndex < frameCount - 1) ReadCurve(details);
                                     timelines.Add(details);
                                 }
@@ -440,46 +423,37 @@ namespace SpineBin2Json35
             var doMap = new List<object>();
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
-                var details = new Dictionary<string, object>();
-                doMap.Add(details);
-                details["time"] = ReadFloat(input);
                 var e1 = new List<object>();
-                details["offsets"] = e1;
+                doMap.Add(new Dictionary<string, object>
+                {
+                    ["time"] = ReadFloat(input),
+                    ["offsets"] = e1
+                });
                 for (int ii = 0, nn = ReadVarint(input, true); ii < nn; ii++)
                 {
-                    var e2 = new Dictionary<string, object>();
-                    e1.Add(e2);
-                    e2["slot"] = slots[ReadVarint(input, true)];
-                    e2["offset"] = ReadVarint(input, true);
+                    e1.Add(new Dictionary<string, object>
+                    {
+                        ["slot"] = slots[ReadVarint(input, true)],
+                        ["offset"] = ReadVarint(input, true)
+                    });
                 }
             }
-            root["drawOrder"] = doMap;
+            root["draworder"] = doMap;
 
-            for (int i = 0, n = ReadVarint(input, true); i < n; i++)//JOJO!
+            var evList = new List<Dictionary<string, object>>();
+            for (int i = 0, n = ReadVarint(input, true); i < n; i++)
             {
-                /*float time = ReadFloat(input);
-                    EventData eventData = skeletonData.events.Items[ReadVarint(input, true)];
-                    Event e = new Event(time, eventData) {
-                        Int = ReadVarint(input, false),
-                        Float = ReadFloat(input),
-                        String = ?  : eventData.String
-                    };
-                    if (e.data.AudioPath != null) {
-                        e.volume = ReadFloat(input);
-                        e.balance = ReadFloat(input);
-                    }
-                    timeline.SetFrame(i, e); */
-                _ = ReadFloat(input);
-                string name = events[ReadVarint(input, true)];
-                _ = ReadVarint(input, false);
-                _ = ReadFloat(input);
-                if (ReadBoolean(input)) _ = ReadString(input);
-                // if (eventsHasAudio[name])
-                // {
-                //     _ = ReadFloat(input);
-                //     _ = ReadFloat(input);
-                // }
+                var detail = new Dictionary<string, object>
+                {
+                    ["time"] = ReadFloat(input),
+                    ["name"] = events[ReadVarint(input, true)],
+                    ["int"] = ReadVarint(input, false),
+                    ["float"] = ReadFloat(input)
+                };
+                if (ReadBoolean(input)) detail["string"] = ReadString(input);
+                evList.Add(detail);
             }
+            root["events"] = evList;
             return root;
         }
 
@@ -488,7 +462,7 @@ namespace SpineBin2Json35
             Region, Boundingbox, Mesh, Linkedmesh, Path//, Point, Clipping
         }
 
-        object ReadAttachment(string oname)
+        object ReadAttachment(string oname, string slot_name, string skin_name)
         {
             var root = new Dictionary<string, object>();
             string name = ReadString(input);
@@ -514,7 +488,7 @@ namespace SpineBin2Json35
                     }
                 case AttachmentType.Boundingbox:
                     {
-                        warning.WriteLine($"Dragonbones may not support bounding box attachment {root["name"]}");
+                        warnings.Add(("bounding box attachment", $"skin {skin_name}, slot {slot_name}, attachment {root["name"]}"));
                         root["type"] = "boundingbox";
                         int vertexCount = ReadVarint(input, true);
                         root["vertexCount"] = vertexCount;
@@ -564,7 +538,7 @@ namespace SpineBin2Json35
                     }
                 case AttachmentType.Path:
                     {
-                        warning.WriteLine($"Dragonbones may not support path attachment {root["name"]}");
+                        warnings.Add(("path attachment", $"skin {skin_name}, slot {slot_name}, attachment {root["name"]}"));
                         root["type"] = "path";
                         root["closed"] = ReadBoolean(input);
                         root["constantSpeed"] = ReadBoolean(input);
@@ -623,7 +597,7 @@ namespace SpineBin2Json35
             return;
         }
 
-        object ReadSkin()
+        object ReadSkin(string skin_name)
         {
             var slots_map = new Dictionary<string, object>();
             for (int i = 0, n = ReadVarint(input, true); i < n; i++)
@@ -634,7 +608,7 @@ namespace SpineBin2Json35
                 for (int ii = 0, nn = ReadVarint(input, true); ii < nn; ii++)
                 {
                     string attachment_name = ReadString(input);
-                    attachments_map[attachment_name] = ReadAttachment(attachment_name);
+                    attachments_map[attachment_name] = ReadAttachment(attachment_name, slot_name, skin_name);
                 }
             }
             return slots_map;
@@ -649,7 +623,7 @@ namespace SpineBin2Json35
             var root = new Dictionary<string, object>();
             var warpper = new DictionaryWarpper(root);
             root["name"] = ReadString(input);
-            warning.WriteLine($"Dragonbones cannot support path constraint {root["name"]}");
+            warnings.Add(("path constraint", $"{root["name"]}"));
             paths.Add(root["name"] as string);
             root["order"] = ReadVarint(input, true);
             var c1 = new List<object>();
@@ -680,7 +654,7 @@ namespace SpineBin2Json35
             var root = new Dictionary<string, object>();
             var warpper = new DictionaryWarpper(root);
             root["name"] = ReadString(input);
-            warning.WriteLine($"Dragonbones cannot support transform constraint {root["name"]}");
+            warnings.Add(("transform constraint", $"{root["name"]}"));
             transforms.Add(root["name"] as string);
             root["order"] = ReadVarint(input, true);
             var c1 = new List<object>();

@@ -92,6 +92,11 @@ namespace SpineBin2Json35
                     Console.WriteLine("Please report the issue to https://github.com/huix-oldcat/SpineBin2Json35 \n请去上面的网址或QQ群1021330668反馈");
                     Console.WriteLine("You may provide this binary file. It helps a lot.\n如果您愿意把转换前文件提供给我们那更好!");
                 }
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.BackgroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("请您检查输出的txt文件来查看龙骨不支持的特性");
             }
 
             End();
@@ -114,11 +119,13 @@ namespace SpineBin2Json35
             Console.WriteLine("---------------------------------------");
             Console.WriteLine("SpineBin2Json is free software: you can redistribute it and/or modify\nit under the terms of the GNU General Public License as published by\nthe Free Software Foundation, either version 3 of the License, or\n(at your option) any later version.\n\nSpineBin2Json is distributed in the hope that it will be useful,\nbut WITHOUT ANY WARRANTY; without even the implied warranty of\nMERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\nGNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public License\nalong with SpineBin2Json.  If not, see <https://www.gnu.org/licenses/>.");
             Console.WriteLine("---------------------------------------");
+            Console.WriteLine();
         }
 
         private static void End()
         {
             Console.ForegroundColor = ConsoleColor.Gray;
+            Console.BackgroundColor = ConsoleColor.Black;
             Console.WriteLine("按回车退出");
             Console.ReadLine();
             Environment.Exit(0);
